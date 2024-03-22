@@ -1,0 +1,43 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-galera-cluster
+  namespace: {{ .Values.namespace }}
+spec:
+  clusterIP: None
+  selector:
+    app: mysql-galera
+  ports:
+  - port: 4567
+    targetPort: 4567
+    protocol: TCP
+    name: replication
+  - port: 4568
+    targetPort: 4568
+    protocol: TCP
+    name: ist
+  {{- if eq .Values.galera.replication.method "rsync" }}
+  - port: 4444 # remove when switch from rsync to clone
+    targetPort: 4444
+    protocol: TCP
+    name: sst
+  {{- end }}
+  publishNotReadyAddresses: True
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  namespace: {{ .Values.namespace }}
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 3306
+    protocol: TCP
+    targetPort: 3306 # external port
+    name: mysql
+  selector:
+    app: mysql-galera
+

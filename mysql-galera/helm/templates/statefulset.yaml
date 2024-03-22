@@ -1,0 +1,103 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql-galera
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: mysql-galera
+spec:
+  selector:
+    matchLabels:
+      app: mysql-galera
+  serviceName: mysql-galera-cluster
+  podManagementPolicy: {{ .Values.podManagementPolicy }}
+  replicas: {{ .Values.replicaCount }}
+  updateStrategy:
+    type: {{ .Values.updateStrategy }}
+    {{- if (eq "Recreate" .Values.updateStrategy) }}
+    rollingUpdate: null
+    {{- end }}
+  template:
+    metadata:
+      labels:
+        app: mysql-galera
+    spec:
+      imagePullSecrets:
+      - name: regcred
+      initContainers:
+      - name: chown-datadir
+        image: busybox:latest
+        command:
+        - /bin/chown
+        - -R
+        - {{ .Values.image.mysqlID | quote }}
+        - /var/lib/mysql
+        volumeMounts:
+        - name: datadir
+          mountPath: /var/lib/mysql
+      containers:
+        - name: mysql-galera
+          image: {{ template "mysql-galera.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources:
+            limits:
+              memory: {{ .Values.container.limits.memory | quote}}
+              cpu: {{ .Values.container.limits.cpu | quote}}
+          envFrom:
+            - secretRef:
+                name: mysql-galera
+          env:
+            - name: WSREP_BOOTSTRAP_FROM
+              value: {{ .Values.galera.bootstrap.bootstrapFromNode | quote }}
+            - name: WSREP_FORCE_BOOTSTRAP
+              value: {{ .Values.galera.bootstrap.forceBootstrap | quote }}
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MEM_REQUEST
+              valueFrom:
+                resourceFieldRef:
+                  containerName: mysql-galera
+                  resource: requests.memory
+            - name: MEM_LIMIT
+              valueFrom:
+                resourceFieldRef:
+                  containerName: mysql-galera
+                  resource: limits.memory
+          ports:
+          - containerPort: 3306
+            name: client
+          - containerPort: 4567
+            name: replication
+          - containerPort: 4568
+            name: ist
+          - containerPort: 4444
+            name: sst
+          volumeMounts:
+            - name: datadir
+              mountPath: /var/lib/mysql
+              readOnly: false
+          readinessProbe:
+            exec:
+              command:
+              - sh
+              - /var/lib/mysql/k8s_readiness_probe
+            initialDelaySeconds: 5
+            periodSeconds: 2
+            timeoutSeconds: 1
+
+  volumeClaimTemplates:
+  - metadata:
+      name: datadir
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      {{- if eq .Values.cloud "do" }}
+      storageClassName: do-block-storage
+      {{- else }}
+      storageClassName: {{ .Values.storageclass }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.datadir.size }}
