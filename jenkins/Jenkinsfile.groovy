@@ -78,7 +78,7 @@ pipeline {
         sh "docker login --username ${DOCKERHUBCREDS_USR} --password ${DOCKERHUBCREDS_PSW}"
 
         echo "Removing all data from previous installation..."
-        sh "sudo rm -frv /var/lib/docker/volumes/minikube/_data/hostpath-provisioner/*"
+        sh "sudo rm -frv /var/lib/docker/volumes/minikube/_data/hostpath-provisioner/${HELM_PROJECT}"
 
       }
     }
